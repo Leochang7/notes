@@ -172,9 +172,9 @@ public void connection() throws IOException, ClassNotFoundException, SQLExceptio
 
 ### 4.Statentment对象
 
-Statement对象主要是将SQL语句发送到数据库中。 JDBC API中主要提供了三种Statement对象(Statement,PreparedStatement,CallableStatement)。
+`Statement`对象主要是将SQL语句发送到数据库中。 JDBC API中主要提供了三种`Statement`对象**(Statement,PreparedStatement,CallableStatement)**。
 
-![watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAd3d6enp6enp6enp6enp6,size_20,color_FFFFFF,t_70,g_se,x_16](D:\Notes\javaWeb\image\watermark,type_d3F5LXplbmhlaQ,shadow_50,text_Q1NETiBAd3d6enp6enp6enp6enp6,size_20,color_FFFFFF,t_70,g_se,x_16.png)
+![image-20220725112326221](D:\Notes\javaWeb\image\image-20220725112326221.png)
 
 **主要掌握两种执行SQL的方法：**
 
@@ -253,7 +253,7 @@ public class JDBCUtils {
 }
 ```
 
-使用JDBCUtils实现`DML`操作
+使用JDBCUtils实现`DML`操作,包括`update,insert,delete`
 
 ```java
 public void testDML(){
@@ -370,5 +370,190 @@ public void testShiwu() {
   4. 批处理往往和`PreparedStatement`一起搭配使用，可以既减少编译次数，又减
      少运行次数，效率大大提高
 
+* 实际使用
+
+  ```java
+  public void batch() throws Exception {
+          Connection connection = JDBCUtils.getConnection();
+          String sql = "insert into test1 values(?,?)";
+          PreparedStatement preparedStatement = connection.prepareStatement(sql);
+          System.out.println("开始执行");
+          //开始时间
+          long start = System.currentTimeMillis();
+          //5000执行
+          for (int i = 0; i < 5000; i++) {
+              preparedStatement.setString(1, "jack" + i);
+              preparedStatement.setString(2, "666");
+              //将sql语句加入到批处理包中 ->看源码
+              preparedStatement.addBatch();
+              //当有1000条记录时，在批量执行
+              if((i + 1) % 1000 == 0) {
+                  //满1000条清空一把
+                  preparedStatement.executeBatch();
+                  preparedStatement.clearBatch();
+              }
+          }
+          long end = System.currentTimeMillis();
+          System.out.println("耗时"+(end-start));
+      }
+  ```
+
+  
+
+
+
 #### 7.3连接池
 
+* **传统获取Connection问题分析**
+  1. 传统的JDBC数据库连接使用`DriverManager`来获取，每次向数据库建立连接的时候都要`Connection`加载到内存中，再验证IP地址，用户名和密码(0.05s~1s时间)。需要数据库连接的时候，就向数据库要求一个频繁的进行数据库连接操作将占用很多的系统资源，容易造成服务器崩溃
+  2. 每一次数据库连接，使用完后都得断开，如果程序出现异常而未能关闭，将导致数据库内存泄漏，最终将导致重启数据库。
+  3. 传统获取连接的方式，不能控制创建的连接数量,如连接过多，也可能导致内存泄漏，MySQL崩溃。
+  4. 解决传统开发中的数据库连接问题，可以采用`数据库连接池技术`(connection pool) 。
+
+* **数据库连接池基本介绍**
+  1. 预先在**缓冲池**中放入一定数量的连接,当需要建立数据库连接时，只需从“**缓冲池**”中取出一个，使用完毕之后再放回去。数据库连接池负责分配、管理和释放数据库
+  2. 连接,它允许应用程序重复使用一个现有的数据库连接,而不是重新建立一个。
+  3. 当应用程序向连接池请求的连接数超过最大连接数量时，这些请求将被加入到等待队列中
+
+* **数据库连接池种类**
+  1. JDBC的数据库连接池吏用` javax.sql.DataSource`来表示，`DataSource`只是一个接口，该接口通常由第三方提供实现
+  2. `C3P0`数据库连接池，速度相对**较慢**，**稳定性**不错(hibernate, spring)
+  3. `3DBCP`数据库连接池，速度相对`c3p0`**较快**，但**不稳定**
+  4. `Proxool`数据库连接池，有监控连接池状念的功能，稳点性较`c3p0`差一点
+  5. `BoneCP` 数据库连接池，**速度快**
+  6. `Druid(德鲁伊)`是阿里提供的数据库连接池，集`DBCP`、`C3P0`、`Proxool`
+     优点于一身的数据库连接池
+
+* **数据库连接池工作原理**![img](D:\Notes\javaWeb\image\src=http%3A%2F%2Fguardwhy.oss-cn-beijing.aliyuncs.com%2Fimg%2FjavaWEB%2Fimage03%2F23-mysql.png&refer=http%3A%2F%2Fguardwhy.oss-cn-beijing.aliyuncs.png)
+
+* **数据库连接池技术的优点**
+  1. `资源重用`
+     由于数据库连接得以重用，避免了频繁创建，释放连接引起的大量性能开销。在减少系统消耗的基础上，另一方面也增加了系统运行环境的平稳性。
+  2. `更快的系统反应速度`
+     数据库连接池在初始化过程中，往往已经创建了若干数据库连接置于连接池中备用。此时连接的初始化工作均已完成。对于业务请求处理而言，直接利用现有可用连接，避免了数据库连接初始化和释放过程的时间开销，从而减少了系统的响应时间
+  3. `新的资源分配手段`
+     对于多应用共享同一数据库的系统而言，可在应用层通过数据库连接池的配置，实现某一应用最大可用数据库连接数的限制，避免某一应用独占所有的数据库资源
+  4. `统一的连接管理，避免数据库连接泄漏`
+     在较为完善的数据库连接池实现中，可根据预先的占用超时设定，强制回收被占用连接，从而避免了常规数据库连接操作中可能出现的资源泄露
+
+* **C3P0连接池的使用**
+
+  **无Xml方式**
+
+  ```java
+  public void C3P0_01() throws IOException, PropertyVetoException, SQLException {
+          //1. 创建一个数据源对象
+          ComboPooledDataSource comboPooledDataSource = new ComboPooledDataSource();
+          //2. 通过配置文件获得相关连接信息
+          Properties properties = new Properties();
+          properties.load(new FileInputStream("src\\main\\resources\\mysql.properties"));
+          String user = properties.getProperty("user");
+          String password = properties.getProperty("password");
+          String url = properties.getProperty("url");
+          String driver = properties.getProperty("driver");
+          //给数据源ComboPooledDataSource设置相关参数
+          //连接管理是由ComboPooledDataSource来管理而不是DriverMannger
+          comboPooledDataSource.setUser(user);
+          comboPooledDataSource.setPassword(password);
+          comboPooledDataSource.setJdbcUrl(url);
+          comboPooledDataSource.setDriverClass(driver);
+          //设置初始化连接数
+          comboPooledDataSource.setInitialPoolSize(10);
+          //设置最大连接数
+          comboPooledDataSource.setMaxPoolSize(50);
+          //测试C3P0连接数据库5000次所用的时间
+          long start = System.currentTimeMillis();
+          for (int i = 0; i < 5000; i++) {
+              Connection connection = comboPooledDataSource.getConnection();
+              connection.close();
+          }
+          long end = System.currentTimeMillis();
+          System.out.println("共耗时"+(end-start)+"ms");
+      }
+  ```
+
+  **有Xml配置文件**
+
+  ```java
+  public void C3P0_02() throws SQLException {
+          ComboPooledDataSource mySource = new ComboPooledDataSource("mySource");
+      //下面的代码用来计算连接 5000 次数据库所需的时间
+          long start = System.currentTimeMillis();
+          for (int i = 0; i < 5000; i++) {
+              Connection connection = mySource.getConnection();
+              connection.close();
+          }
+          long end = System.currentTimeMillis();
+          System.out.println("配置文件连接用时："+(end-start));
+      }
+  ```
+
+  > c3p0-config.xml文件应该放在target目录下的classes文件夹内
+
+  ```xml
+  <?xml version="1.0" encoding="UTF-8"?>
+  
+  <c3p0-config>
+      <default-config>
+          <property name="driverClass">com.mysql.cj.jdbc.Driver</property>
+          <property name="jdbcUrl">jdbc:mysql://localhost:3306/jdbc</property>
+          <property name="user">root</property>
+          <property name="password">java</property>
+  
+          <property name="initialPoolSize">10</property>
+          <property name="maxIdleTime">30</property>
+          <property name="maxPoolSize">100</property>
+          <property name="minPoolSize">10</property>
+      </default-config>
+  <!--    数据源名称，代表连接池-->
+      <named-config name="mySource">
+          <property name="driverClass">com.mysql.jdbc.Driver</property>
+          <property name="jdbcUrl">jdbc:mysql://localhost:3306/educ</property>
+          <property name="user">root</property>
+          <property name="password">z1093964909</property>
+  
+          <property name="initialPoolSize">10</property>
+          <property name="maxIdleTime">30</property>
+          <property name="maxPoolSize">50</property>
+          <property name="minPoolSize">10</property>
+          <property name="maxStatements">5</property>
+          <property name="maxStatementsPerConnection">2</property>
+      </named-config>
+  </c3p0-config>
+  ```
+
+* **使用的Druid(德鲁伊)**
+
+  **使用配置文件**
+
+  ```java
+  public void druid() throws Exception {
+          Properties properties = new Properties();
+          properties.load(new  FileInputStream("src\\druid.properties"));
+          DataSource dataSource = DruidDataSourceFactory.createDataSource(properties);
+          //下面的代码用来计算连接 5000 次数据库所需的时间
+          long start = System.currentTimeMillis();
+          for (int i = 0; i < 500000; i++) {
+              Connection connection = dataSource.getConnection();
+              connection.close();
+          }
+          long end = System.currentTimeMillis();
+          System.out.println("配置文件连接用时："+(end-start));
+      }
+  ```
+
+  **druid.properties**
+
+  ```properties
+  driverClassName=com.mysql.cj.jdbc.Driver
+  url=jdbc:mysql://localhost:3306/educ
+  # 注意这里是username
+  username=root
+  password=z1093964909
+  # 初始化申请的连接数量
+  initialSize=10
+  # 最大的连接数量
+  maxActive=10
+  # 超时时间3000
+  maxWait=3000
+  ```
