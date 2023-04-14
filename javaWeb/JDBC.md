@@ -1,6 +1,6 @@
 [toc]
 
-# java的JDBC编程————以Mysql为例
+# java的JDBC编程
 
 ## JDBC介绍
 
@@ -123,9 +123,9 @@ public class jdbc03 {
 
 ### 3.ResultSet对象
 
-ResultSet对象它被称为结果集，它代表符合SQL语句条件的所有行，并且它通过一套getXXX方法提供了对这些行中数据的访问。
+`ResultSet`对象它被称为结果集，它代表符合SQL语句条件的所有行，并且它通过一套getXXX方法提供了对这些行中数据的访问。
 
-ResultSet里的数据一行一行排列，每行有多个字段，并且有一个记录指针，指针所指的数据行叫做当前数据行，我们只能来操作当前的数据行。 我们如果想要取得某一条记录，就要使用`ResultSet`的`next()`方法 ,如果我们想要得到ResultSet里的所有记录，就应该使用while循环。
+`ResultSet`里的数据一行一行排列，每行有多个字段，并且有一个记录指针，指针所指的数据行叫做当前数据行，我们只能来操作当前的数据行。 我们如果想要取得某一条记录，就要使用`ResultSet`的`next()`方法 ,如果我们想要得到`ResultSet`里的所有记录，就应该使用`while循环`。
 
 ```java
 public void connection() throws IOException, ClassNotFoundException, SQLException {
@@ -162,7 +162,7 @@ public void connection() throws IOException, ClassNotFoundException, SQLExceptio
 }
 ```
 
-- **当语句 Connection connection = DriverManager.getConnection(url, user, password) 执行后**，Connection接口类型的变量connection得到的是它的实现类 JDBC4Connection（ConnectionImpl的子类）。[其中实现类是由mysql的jar包提供的
+- **当语句 Connection connection = DriverManager.getConnection(url, user, password) 执行后**，`Connection`接口类型的变量connection得到的是它的实现类 `JDBC4Connection`（ConnectionImpl的子类）。其中实现类是由mysql的jar包提供的
 - ResultSet是接口。因为引入了mysql的jar包（该数据库公司提供的），里面实现了该接口。
 - **java.sql**：是java公司包，接口为主，不实现。 **com.mysql.jdbc:** 是mysql厂商提供的具体实现。
 
@@ -405,11 +405,12 @@ public void testShiwu() {
 #### 7.3连接池
 
 * **传统获取Connection问题分析**
+  
   1. 传统的JDBC数据库连接使用`DriverManager`来获取，每次向数据库建立连接的时候都要`Connection`加载到内存中，再验证IP地址，用户名和密码(0.05s~1s时间)。需要数据库连接的时候，就向数据库要求一个频繁的进行数据库连接操作将占用很多的系统资源，容易造成服务器崩溃
   2. 每一次数据库连接，使用完后都得断开，如果程序出现异常而未能关闭，将导致数据库内存泄漏，最终将导致重启数据库。
   3. 传统获取连接的方式，不能控制创建的连接数量,如连接过多，也可能导致内存泄漏，MySQL崩溃。
   4. 解决传统开发中的数据库连接问题，可以采用`数据库连接池技术`(connection pool) 。
-
+  
 * **数据库连接池基本介绍**
   1. 预先在**缓冲池**中放入一定数量的连接,当需要建立数据库连接时，只需从“**缓冲池**”中取出一个，使用完毕之后再放回去。数据库连接池负责分配、管理和释放数据库
   2. 连接,它允许应用程序重复使用一个现有的数据库连接,而不是重新建立一个。
@@ -557,3 +558,230 @@ public void testShiwu() {
   # 超时时间3000
   maxWait=3000
   ```
+
+  
+  
+  ![在这里插入图片描述](D:\Notes\javaWeb\image\watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dlaXhpbl80MzUyMDQ1MA==,size_16,color_FFFFFF,t_70.png)**Druid工具类**
+  
+  ```java
+  public class JdbcUtilByDruid {
+  
+      private static DataSource dataSource;
+  	//初始化
+      static {
+          Properties properties = new Properties();
+          try {
+              properties.load(new FileReader("src//druid.properties"));
+              dataSource = DruidDataSourceFactory.createDataSource(properties);
+          } catch (Exception e) {
+              e.printStackTrace();
+          }
+      }
+  	//连接
+      public static Connection getConnection() throws SQLException {
+          return dataSource.getConnection();
+      }
+  	//关闭。此处close方法不是真的关闭连接，只是把连接返回数据库连接池
+      public static void close(ResultSet resultSet, Statement statement, Connection connection){
+          try {
+              if(resultSet!=null){
+                  resultSet.close();
+              }
+              if(statement!=null){
+                  statement.close();
+              }
+              if(connection!=null){
+                  connection.close();
+              }
+          } catch (SQLException e) {
+              throw new RuntimeException(e);
+          }
+      }
+  }
+  ```
+  
+  
+
+### 8.APDBUtils
+
+* **问题**
+
+1. 关闭connection后，resultSet结果集无法使用
+
+2. resultSet不利于数据的管理
+
+3. 示意图
+   ![image-20220725143249399](D:\Notes\javaWeb\image\image-20220725143249399.png)
+
+   
+
+* **解决办法**
+
+  把数据库数据映射成java里的类，采用`集合`来存储（java存储resultSet）。封装的java类也称：`JavaBean`，`PoJo`，`Domain`
+
+  引出DBUtil工具，该工具提供了一整套简洁的方法。
+
+* **Apache—DBUtils**
+
+  ![image-20220725143737072](D:\Notes\javaWeb\image\image-20220725143737072.png)
+
+* **使用APDBUtils实现select**
+
+  ```java
+  //使用apache-DBUtils 工具类+druid 完成对表的crud操作
+      //返回结果是多行的情况
+      public void testQueryMany() throws SQLException {
+          //1。得到连接(druid)
+          Connection connection = JDBCUtils.getConnection();
+          //2．使用DBUtils 类和接口，先引入DBUtils相关的jar,加入到本Project
+          // 3．创建QueryRunner
+          QueryRunner queryRunner = new QueryRunner();
+          //4。就可以执行相关的方法，返回ArrayList结果集
+          String sql = "select * from student";
+          //(1) query 方法就是执行sql 语句，得到resultset ---封装到-->ArrayList集合中
+          //(2) 返回集合
+          //(3) connection:连接
+          //(4) sql :执行的sql语句
+          //(5) new BeanListHandLer<>(Actor.class):在将resultset -> Actor对象 -> 封装到 ArrayListl
+          //底层使用反射机制去获取Actor 类的属性，然后进行封装
+          //(6) 1 就是给sql 语句中的?赋值，可以有多个值，因为是可变参数0bject..·params
+          //(7) 底层得到的resultSet，会在query 关闭，关闭PreparedStatment
+          List<Student> list = queryRunner.query(connection, sql, new BeanListHandler<>(Student.class));
+          System.out.println("输出集合的信息");
+          for (Student student : list) {
+              System.out.println(student);
+          }
+          //释放资源
+          JDBCUtils.close(null,null,connection);
+      }
+  ```
+
+  > Student中，即JavaBean中一定要给一个无参构造用于反射，字段必须写getter和setter方法
+
+**使用APDBUtils实现DML**
+
+```java
+//使用apache-DBUtils 工具类+druid 完成对表的crud操作
+    //返回结果是多行的情况
+    public void testQueryMany() throws SQLException {
+        //1。得到连接(druid)
+        Connection connection = JDBCUtils.getConnection();
+        //2．使用DBUtils 类和接口，先引入DBUtils相关的jar,加入到本Project
+        //3．创建QueryRunner
+        QueryRunner queryRunner = new QueryRunner();
+        //4. 这里组织sql完成update,insert,delete
+        String sql = "update student set sname = ? where sname = '李白';
+        //(1) 执行dml语句是queryRunner.update()
+        //(2) 返回的值是受影响的行数
+        int affectedRows = queryRunner.update(connection,sql,"白居易")
+        System.out.println(affectedRows > 0 ? "执行成功":"没有影响到表
+");
+        //释放资源
+        JDBCUtils.close(null,null,connection);
+    }
+```
+
+### 9.BasicDao
+
+* **前言**
+
+![image-20220725155044578](D:\Notes\javaWeb\image\image-20220725155044578.png)
+
+![image-20220725160522146](D:\Notes\javaWeb\image\image-20220725160522146.png)
+
+* **BasicDao类**
+
+  ```java
+  public class BasicDao<T> {
+  
+      private QueryRunner queryRunner = new QueryRunner();
+  	//dml操作
+      public int update(String sql, Object... parameters) {
+          Connection connection = null;
+          try {
+              connection = JdbcUtilByDruid.getConnection();
+              int rows = queryRunner.update(connection, sql, parameters);
+              return rows;
+          } catch (SQLException e) {
+              throw new RuntimeException(e);
+          }finally {
+              JdbcUtilByDruid.close(null,null,connection);
+          }
+  
+      }
+  	//查询返回多行
+      public List<T> queryMulti(String sql，Class clazz, Object... parameters)  {
+          Connection connection = null;
+          try {
+              connection = JdbcUtilByDruid.getConnection();
+              return queryRunner.query(connection, sql, new BeanListHandler<T>(clazz), parameters);
+          } catch (SQLException e) {
+              throw new RuntimeException(e);
+          }finally {
+              JdbcUtilByDruid.close(null,null,connection);
+          }
+      }
+      //返回单行
+      public List<T> querySingle(String sql，Class clazz, Object... parameters)  {
+          Connection connection = null;
+          try {
+              connection = JdbcUtilByDruid.getConnection();
+              return queryRunner.query(connection, sql, new BeanHandler<T>(clazz), parameters);
+          } catch (SQLException e) {
+              throw new RuntimeException(e);
+          }finally {
+              JdbcUtilByDruid.close(null,null,connection);
+          }
+      }
+      //返回单值
+      public Object queryScalar(String sql, Object... parameters)  {
+          Connection connection = null;
+          try {
+              connection = JdbcUtilByDruid.getConnection();
+              return queryRunner.query(connection, sql, new ScalarHandler()), parameters);
+          } catch (SQLException e) {
+              throw new RuntimeException(e);
+          }finally {
+              JdbcUtilByDruid.close(null,null,connection);
+          }
+      }
+  }
+  ```
+
+  
+
+* **XxxDao类**
+
+  例如`AdminDao`类，继承BasicDao类
+
+  ```java
+  public class AdminDao extends BasicDao<Admin>{
+  
+  	//继承所有BasicDao的方法
+  	//在此编写自己的特有方法
+  
+  }
+  ```
+
+* **实际开发**
+
+  由上到下。
+
+  **AppView界面层**
+
+  {显示界面}
+
+  **Service业务层**（ActorService，GoodsService... 一张表一个Service）
+
+  {组织sql，并调用XxxDao。因为需要操作好几张表，调用好几个不同的Dao}
+
+  **XxxDao层** （继承于BasciDao）
+
+  {对数据的增删改查。可有特有操作}
+
+  **domain层**
+
+  {对应数据库表的 类}
+
+  **Test测试层**
+
