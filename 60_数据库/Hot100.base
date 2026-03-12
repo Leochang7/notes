@@ -50,3 +50,12 @@ views:
       file.name: 193
       file.tags: 270
       file.ctime: 160
+  - type: table
+    name: 矩阵
+    filters:
+      and:
+        - file.hasTag("矩阵")
+    order:
+      - file.name
+      - file.tags
+      - file.ctime
